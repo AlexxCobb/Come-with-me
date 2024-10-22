@@ -10,9 +10,10 @@ import java.util.List;
 @Transactional(readOnly = true)
 public interface CompilationEventRepository extends JpaRepository<CompilationEvent, Long> {
 
-    List<CompilationEvent> findAllByCompilation_Id(Long compId);
+    List<CompilationEvent> findAllByCompilationId(Long compId);
 
-    void deleteAllByCompilation_Id(Long compId);
+    @Transactional
+    void deleteAllByCompilationId(Long compId);
 
-    List<CompilationEvent> findByCompilation_IdIn(Collection<Long> ids);
+    List<CompilationEvent> findByCompilationIdIn(Collection<Long> ids);
 }

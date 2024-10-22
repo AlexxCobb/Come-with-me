@@ -51,8 +51,4 @@ public class Comment {
 
     @Enumerated(EnumType.STRING)
     private State status;
-
-    private Integer likes;
-
-    private Integer dislikes;
 }

@@ -143,7 +143,6 @@ public class EventService {
             }
         }
 
-
         Category category;
         if (eventDto.getCategory() != null) {
             category = categoryMapper.toCategory(categoryService.findCategoryById(eventDto.getCategory()));
@@ -492,7 +491,7 @@ public class EventService {
 
         statsClient.createHitStats(new StatRequestDto("ewm-main-service", request.getRequestURI(), request.getRemoteAddr(), time));
         var eventDto = eventMapper.toEventFullDto(event);
-        var comments = commentRepository.findByEventId(eventId).stream().map(commentMapper::toCommentDto).toList();
+        var comments = getCommentsByEventId(eventId);
         if (!comments.isEmpty()) {
             eventDto.setComments(comments);
         }
@@ -521,7 +520,7 @@ public class EventService {
         compilationRepository.findById(compId).orElseThrow(
                 () -> new NotFoundException("Компиляция с id = " + compId + "не найдена"));
         compilationRepository.deleteById(compId);
-        compilationEventRepository.deleteAllByCompilation_Id(compId);
+        compilationEventRepository.deleteAllByCompilationId(compId);
     }
 
     @Transactional
@@ -537,10 +536,10 @@ public class EventService {
         compilationRepository.save(comp);
 
         if (compilationDto.getEvents() != null && !compilationDto.getEvents().isEmpty()) {
-            compilationEventRepository.deleteAllByCompilation_Id(compId);
+            compilationEventRepository.deleteAllByCompilationId(compId);
             return saveEventsCompilation(compilationDto.getEvents(), comp);
         }
-        compilationEventRepository.deleteAllByCompilation_Id(compId);
+        compilationEventRepository.deleteAllByCompilationId(compId);
         var result = compilationMapper.toCompilationDtoResponse(comp);
         result.setEvents(Collections.emptyList());
         return result;
@@ -554,7 +553,7 @@ public class EventService {
         var comp = compilationRepository.findById(compId).orElseThrow(
                 () -> new NotFoundException("Компиляция с id = " + compId + "не найдена"));
 
-        var compEvents = compilationEventRepository.findAllByCompilation_Id(comp.getId());
+        var compEvents = compilationEventRepository.findAllByCompilationId(comp.getId());
         var eventShortDto = compEvents.stream().map(CompilationEvent::getEvent).map(eventMapper::toEventShortDto).toList();
         var result = compilationMapper.toCompilationDtoResponse(comp);
         result.setEvents(eventShortDto);
@@ -565,7 +564,7 @@ public class EventService {
         var page = PaginationServiceClass.pagination(from, size);
         var compilations = compilationRepository.findByPinned(pinned, page);
         var compIds = compilations.stream().map(Compilation::getId).toList();
-        var compEvents = compilationEventRepository.findByCompilation_IdIn(compIds);
+        var compEvents = compilationEventRepository.findByCompilationIdIn(compIds);
         var compEventMap = compEvents.stream().collect(Collectors.groupingBy(CompilationEvent::getCompilation));
 
         List<CompilationDtoResponse> result = new ArrayList<>();
@@ -700,13 +699,8 @@ public class EventService {
             throw new DataViolationException("Нельзя ставить лайк неопубликованному комментарию");
         }
         likeRepository.save(new Like(null, user, comment, true));
-        if (comment.getLikes() != null) {
-            comment.setLikes(comment.getLikes() + 1);
-        } else {
-            comment.setLikes(1);
-        }
-        var createdComment = commentRepository.save(comment);
-        return commentMapper.toCommentDto(createdComment);
+        var commentDto = commentMapper.toCommentDto(comment);
+        return setLikesAndDislikesToCommentDto(commentDto);
     }
 
     @Transactional
@@ -720,13 +714,52 @@ public class EventService {
             throw new DataViolationException("Нельзя ставить лайк неопубликованному комментарию");
         }
         likeRepository.save(new Like(null, user, comment, false));
-        if (comment.getDislikes() != null) {
-            comment.setDislikes(comment.getDislikes() + 1);
-        } else {
-            comment.setDislikes(1);
+        var commentDto = commentMapper.toCommentDto(comment);
+        return setLikesAndDislikesToCommentDto(commentDto);
+    }
+
+    /**
+     * методы PublicCommentController
+     */
+
+    public List<CommentDto> getCommentsByEventId(Long eventId) {
+        eventRepository.findById(eventId)
+                .orElseThrow(() -> new NotFoundException("Событие с id = " + eventId + " не найдено.")
+                );
+        var comments = commentRepository.findByEventId(eventId);
+        var commentsIds = comments.stream().map(Comment::getId).toList();
+        var commentsDto = comments.stream().map(commentMapper::toCommentDto).toList();
+        var likes = likeRepository.findByCommentIdIn(commentsIds);
+        if (!likes.isEmpty()) {
+            var commentsMap = likes.stream().collect(Collectors.groupingBy(Like::getComment));
+            for (CommentDto commentDto : commentsDto) {
+                var comment = commentMapper.toComment(commentDto);
+                if (commentsMap.containsKey(comment)) {
+                    var like = commentsMap.get(comment);
+                    var likeMap = like.stream().collect(Collectors.groupingBy(Like::getLike));
+                    if (likeMap.containsKey(true)) {
+                        var likesToComment = likeMap.get(true).size();
+                        commentDto.setLikes(likesToComment);
+                    }
+                    if (likeMap.containsKey(false)) {
+                        var dislikesToComment = likeMap.get(false).size();
+                        commentDto.setDislikes(dislikesToComment);
+                    }
+                }
+            }
         }
-        var createdComment = commentRepository.save(comment);
-        return commentMapper.toCommentDto(createdComment);
+        return commentsDto;
+    }
+
+    public CommentDto findCommentDtoById(Long commentId) {
+        var comment = commentRepository.findById(commentId)
+                .orElseThrow(() -> new NotFoundException("Комментарий с id = " + commentId + " не найдено.")
+                );
+        if (!comment.getStatus().equals(State.PUBLISHED)) {
+            throw new DataViolationException("Данный комментарий не опубликован");
+        }
+        var commentDto = commentMapper.toCommentDto(comment);
+        return setLikesAndDislikesToCommentDto(commentDto);
     }
 
     private CompilationDtoResponse saveEventsCompilation(Set<Long> eventIds, Compilation compilation) {
@@ -743,5 +776,19 @@ public class EventService {
         var result = compilationMapper.toCompilationDtoResponse(compilation);
         result.setEvents(eventShortDto);
         return result;
+    }
+
+    private CommentDto setLikesAndDislikesToCommentDto(CommentDto commentDto) {
+        var likes = likeRepository.findByCommentId(commentDto.getId());
+        var likesMap = likes.stream().collect(Collectors.groupingBy(Like::getLike));
+        if (likesMap.containsKey(true)) {
+            var likeTrue = likesMap.get(true).size();
+            commentDto.setLikes(likeTrue);
+        }
+        if (likesMap.containsKey(false)) {
+            var likeFalse = likesMap.get(false).size();
+            commentDto.setDislikes(likeFalse);
+        }
+        return commentDto;
     }
 }

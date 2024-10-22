@@ -9,7 +9,7 @@ import ru.practicum.model.Comment;
 public interface CommentMapper {
     @Mapping(target = "authorId", source = "author.id")
     @Mapping(target = "eventId", source = "event.id")
-    @Mapping(target = "likes", source = "likes")
-    @Mapping(target = "dislikes", source = "dislikes")
     CommentDto toCommentDto(Comment comment);
+
+    Comment toComment(CommentDto commentDto);
 }
