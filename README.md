@@ -1,9 +1,9 @@
-# Come wuth me
+# Come with me
 ExploreWithMe application project.
 https://github.com/AlexxCobb/java-explore-with-me/pull/3
 
 
-Приложение Come wuth me (англ. «Пойдем со мной»). 
+Приложение Come with me (англ. «Пойдем со мной»). 
 Позволяет пользователям делиться информацией об интересных событиях и находить компанию для участия в них.
 
 Два сервиса:
