@@ -1,6 +1,6 @@
 # Come with me
-ExploreWithMe application project.
-https://github.com/AlexxCobb/java-explore-with-me/pull/3
+Come with me application project.
+https://github.com/AlexxCobb/come-with-me/pull/3
 
 
 Приложение Come with me (англ. «Пойдем со мной»). 
